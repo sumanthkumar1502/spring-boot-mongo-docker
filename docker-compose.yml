@@ -1,29 +1,32 @@
-node { 
-    def buildnumber = BUILD_NUMBER
-    stage('checkoutcode') {
-   git credentialsId: 'f9a094cb-84e2-4fda-9711-6459f2efbe9f', url: 'https://github.com/sumanthkumar1502/spring-boot-mongo-docker.git'
-    }
-    stage('buildimage') {
-        def mavenhome = tool name : "maven"
-        sh "${mavenhome}/bin/mvn package"
-    }
-    stage('builddockerimage') {
-        sh "docker build -t sumanthkumar1502/spring-boot-mongo-docker:${buildnumber} ."
-    }
-    stage('docker login & push') {
-        withCredentials([string(credentialsId: 'e3d1e33d-357c-4d01-8731-565857b9f9b6', variable: 'dockerpwd')]) {
-            sh "docker login -u sumanthkumar1502 -p ${dockerpwd}"
-        }
-        sh "docker push sumanthkumar1502/spring-boot-mongo-docker:${buildnumber}"
-    }
-    stage('changing tag using sed') {
-        sh "sed -i s/latest/${buildnumber}/ docker-compose.yml "
-    }
-    stage('copy docker-compose.yml to server') {
-        sshagent(['23ff002d-a9c5-460c-b10f-908f2d4561f5']) {
-            sh "scp -o StrictHostkeyChecking=no docker-compose.yml ubuntu@15.207.100.113:/home/ubuntu"
-            sh "ssh -o StrictHostkeyChecking=no ubuntu@15.207.100.113 docker-compose up -d "
-        }
-    }
-    
-}
+version: '3.1'
+
+services:
+  springboot:
+    image: sumanthkumar1502/spring-boot-mongo-docker:1
+    restart: always # This will be ignored if we deploy in docker swarm
+    environment:
+    - MONGO_DB_HOSTNAME=mongo
+    - MONGO_DB_USERNAME=devdb
+    - MONGO_DB_PASSWORD=devdb@123
+    ports:
+      - 8989:8080
+    working_dir: /opt/app
+    depends_on:
+      - mongo
+    networks:
+    - springappnetwork
+
+
+  mongo:
+    image: mongo
+    environment:
+    - MONGO_INITDB_ROOT_USERNAME=devdb
+    - MONGO_INITDB_ROOT_PASSWORD=devdb@123
+    volumes:
+      - mongodb:/data/db
+    restart: always
+    networks:
+    - springappnetwork
+
+volumes:
+  mongodb:
